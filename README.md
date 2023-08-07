@@ -23,7 +23,7 @@ Telegram Media Auto Downloader for Node.js</h1>
 1. 安装 nodejs | Install nodejs: https://nodejs.org/en/download ;
 2. 打开命令行工具(cmd/terminal/等等)，克隆本仓库 | Open cli (cmd/terminal/etc), clone this repository;
 ```
-$ git clone https://github.com/dzwzqlx/telegram_media_auto_downloader_nodejs.git
+$ git clone https://github.com/xiaofa67373/telegram_media_auto_downloader_nodejs.git
 $ cd telegram_media_auto_downloader_nodejs
 ```
 3. 安装依赖包 | Install dependencies
