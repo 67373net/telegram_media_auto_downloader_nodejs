@@ -34,7 +34,7 @@ $ npm install
 ### 使用
 1. 启动 | launch
 ```
-node index.js
+$ node index.js
 ```
 2. 按照后续的提示一步步操作
 
