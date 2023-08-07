@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <link rel="icon" href="icon2.jpg">
+  <title>Telegram Media Auto Downloader</title>
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.3.4/dist/vue.global.min.js"></script>
+  <!-- <script src="/socket.io/socket.io.js"></script> -->
+  <script src="socket.io.min.js"></script>
+  <link rel="stylesheet" type="text/css" href="index.css">
+</head>
+
+<body style="max-width: 888px;margin: auto;">
+  <div id="myAd"></div>
+  <table class="fenlan">
+    <tr>
+      <td style="color: grey;"> 控制台端口号 Console port number&nbsp; <input @keyup.enter="setPort" type="text"
+          v-model="port" class="smallinputtext" @mouseover="mouseDivType='consolePort'"
+          @mouseleave="mouseDivType=''">&nbsp;
+        <button @click="setPort" type="submit">OK</button>
+      </td>
+      <td v-if="test?true:!status.showConsoleLogin" @click="resetCookie"
+        style="vertical-align:middle;text-align: right; color: darkblue;">
+        重置 cookie | Reset cookie</td>
+    </tr>
+  </table>
+  <h2>Telegram 文件自动下载器 | Telegram Media Auto Downloader</h2>
+  <hr style="border: 1px solid black; margin-bottom: 1.8em;" />
+  <!-- <div style="width: 100%;background-color: lightyellow;">{{port}}</div> -->
+  <div v-for="(item, i) of notes" :key="i"
+    style="background-color: beige; margin: 0.2em 0; white-space: pre-line;font-size: small;line-height: 1.3em;">
+    <button @click="deleteNote(index)" style="vertical-align: top; margin: 0.7em;">X</button>
+    <div style="display: inline-block; margin: 0.6em 0;">{{item}}</div>
+  </div>
+  <div v-if="status.showConsoleLogin">
+    <table class="fenlan">
+      <tr>
+        <td>
+          <h3>登录控制台</h3>
+          <div>请在安装文件夹的 <code>cookie.txt</code> 中找到 <code>cookie</code> 并输入。</div>
+        </td>
+        <td>
+          <h3>Console Login</h3>
+          <div>Please enter the <code>cookie</code>, which can be found in the
+            <code>cookie.txt</code> in the installation folder.
+          </div>
+        </td>
+      </tr>
+    </table>
+    <div style="text-align: center; margin: 2em;" class="inputBlock">
+      <span class="em6">cookie</span>
+      <input @keyup.enter="setCookie" v-model="cookie" type="text">&nbsp;
+      <button @click="setCookie" type="submit">OK</button>
+    </div>
+  </div>
+
+  <div v-if="!status.showConsoleLogin && status.showTgLogin">
+    <table class="fenlan">
+      <tr>
+        <td>
+          <div><b>如何获取 api_id & api_hash：</b><br />
+            <ol>
+              <li>
+                访问 <a href="https://my.telegram.org/apps">https://my.telegram.org/apps</a>
+                并登录。请注意：如果短信中没有 Confirmation code，可以到 Telegram 聊天中找一哈；
+              </li>
+              <li>
+                点击：API development tools；
+              </li>
+              <li>
+                填写表格，注册一个新的 Telegram 应用，即可获取到 api_id 和 api_hash。
+              </li>
+            </ol>
+          </div>
+        </td>
+        <td>
+          <div><b>How to get my api_id & api_hash:</b><br />
+            <ol>
+              <li>
+                Visit <a href="https://my.telegram.org/apps">https://my.telegram.org/apps</a> and log
+                in. Please note: if there is no Confirmation code in the sms, you can look for it in
+                Telegram chat;
+              </li>
+              <li>
+                Click: API development tools;
+              </li>
+              <li>
+                Fill out the form to register a new Telegram application, then you should get your
+                api_id and api_hash.
+              </li>
+            </ol>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- <table class="fenlan">
+      <tr>
+        <td> -->
+    <form v-if="test?true:!(showPhoneNumber || showPassword || showPhoneCode)" class="inputBlock"
+      style="text-align: left; width: fit-content; margin: 2em auto; padding: 2em;" @submit.native.prevent>
+      <span class="em6">api_id</span><input type="text" v-model="tgParams.api_id"> <br />
+      <span class="em6">api_hash</span><input type="text" v-model="tgParams.api_hash"> <br />
+      <br />
+      <div>如果你在中国，记得使用代理…</div>
+      <div>Try using proxy if connect fail.</div>
+      <div style="margin-bottom: 0.5em; font-weight: bold;"> <input type="checkbox" v-model="tgParams.isProxy">
+        使用代理 | Use Proxy
+      </div>
+      <div v-if="test?true:tgParams.isProxy">
+        <span class="em6">socksType</span><input type="text" v-model="tgParams.options.proxy.socksType"
+          @mouseover="mouseDivType='socksType'" @mouseleave="mouseDivType=''"> <br />
+        <span class="em6">ip</span><input type="text" v-model="tgParams.options.proxy.ip" @mouseover="mouseDivType='ip'"
+          @mouseleave="mouseDivType=''"> <br />
+        <span class="em6">port</span><input type="text" v-model="tgParams.options.proxy.port"
+          @mouseover="mouseDivType='port'" @mouseleave="mouseDivType=''"> <br />
+        <div style="margin-top: 0.5em;">-------- 高级设置 | advanced settings --------</div>
+        <div style="margin: 0.2em 0; font-size: small; line-height: 1.2em;color: darkgray;">如果不知道怎么填，可以不用管 | Leave
+          them as default if you don't know what's this.</div>
+        <span class="em6">useWss</span><input type="checkbox" v-model="tgParams.options.useWSS"
+          @mouseover="mouseDivType='useWss'" @mouseleave="mouseDivType=''">
+        <br />
+        <span class="em6">MTProxy</span><input type="checkbox" v-model="tgParams.options.proxy.MTProxy"
+          @mouseover="mouseDivType='MTProxy'" @mouseleave="mouseDivType=''">
+        <br />
+        <span class="em6">secret</span><input type="text" v-model="tgParams.options.proxy.secret"
+          @mouseover="mouseDivType='secret'" @mouseleave="mouseDivType=''">
+        <br />
+      </div>
+      <div style="text-align: center;padding-top: 1em;">
+        <button @click="setTgParams" type="submit" style="padding: 0.8em 2em; display: inline-block;">OK</button>
+      </div>
+    </form>
+    <!-- </td>
+        <td> -->
+    <div v-if="test?true:(showPhoneNumber || showPassword || showPhoneCode)">
+      <h3>登录 Telegram | Telegram Login</h3>
+      <div style="margin:1em auto; width: fit-content; padding: 0.8em 0.8em;" class="inputBlock">
+        <div v-if="showPhoneNumber">
+          记得加区号！！！<br />
+          Please enter your number in <a href="https://telegram.org/faq#login-and-sms">
+            international format !!!</a><br />
+          <span class="em10">Phone Number:</span>
+          <input @keyup.enter="getPhoneNumber" type="text" class="middleinputtext" v-model="phoneNumber"
+            placeholder="with country code" @mouseover="mouseDivType='phoneNumber'" @mouseleave="mouseDivType=''">&nbsp;
+          <button @click="getPhoneNumber" type="submit">OK</button>
+        </div>
+        <div v-if="showPhoneCode">
+          <span class="em10">Confirmation code:</span>
+          <input @keyup.enter="getPhoneCode" type="text" class="middleinputtext" v-model="phoneCode"
+            @mouseover="mouseDivType='phoneCode'" @mouseleave="mouseDivType=''">&nbsp;
+          <button @click="getPhoneCode" type="submit">OK</button>
+        </div>
+        <div v-if="showPassword">
+          <span class="em10">Password:</span>
+          <input @keyup.enter="getPassword" type="password" class="middleinputtext" v-model="password">&nbsp;
+          <button @click="getPassword" type="submit">OK</button>
+        </div>
+      </div>
+    </div>
+    <!-- </td>
+      </tr>
+    </table> -->
+  </div>
+
+  <!-- <div v-if="showTgLogin2">
+    <table class="fenlan">
+      <tr>
+        <td>
+          <h3>登录 Telegram</h3>
+          <div>如果你想下载某个群中的文件，请确保当前登录的 Telegram 账号是这个群的成员。</div>
+        </td>
+        <td>
+          <h3>Telegram Login</h3>
+          <div>If you want to download the files from a group, make sure that the Telegram
+            account you are currently logged in to is a member of that group.</div>
+        </td>
+      </tr>
+    </table>
+    <div style="margin:1em auto; width: fit-content; padding: 1.8em 2.8em;" class="inputBlock">
+      <div v-if="showPhoneNumber">
+        Please enter your number in <a href="https://telegram.org/faq#login-and-sms">
+          international format</a><br />
+        <span class="em10">Phone Number:</span>
+        <input @keyup.enter="getPhoneNumber" type="text" v-model="phoneNumber" placeholder="with country code">&nbsp;
+        <button @click="getPhoneNumber" type="submit">OK</button>
+      </div>
+      <div v-if="showPassword">
+        <span class="em10">Password:</span>
+        <input @keyup.enter="getPassword" type="text" v-model="password">&nbsp;
+        <button @click="getPassword" type="submit">OK</button>
+      </div>
+      <div v-if="showPhoneCode">
+        <span class="em10">Confirmation code:</span>
+        <input @keyup.enter="getPhoneCode" type="text" v-model="phoneCode" @mouseover="mouseDivType='phoneCode'"
+          @mouseleave="mouseDivType=''">&nbsp;
+        <button @click="getPhoneCode" type="submit">OK</button>
+      </div>
+    </div>
+  </div> -->
+
+  <div v-if="!status.showConsoleLogin && !status.showTgLogin">
+    <table class="fenlan">
+      <tr>
+        <td>
+          <h3>控制台 Console</h3>
+        </td>
+        <!-- <td style="vertical-align:middle;text-align: right; ">当前登录账号：<span></span><span style="color: darkblue;">
+            退出</span></td> -->
+      </tr>
+    </table>
+
+    <!-- <table class=" fenlan" style="font-size: small;">
+      <tr>
+        <td>
+          <b>如何找到群号：</b>点开这个机器人：<a href="https://t.me/username_to_id_bot">@username_to_id_bot</a>
+          ，点击 Chat，把群发给他。<br />
+        </td>
+        <td>
+          <b>How to get group id: </b>talk to this bot: <a href="https://t.me/username_to_id_bot">
+            @username_to_id_bot</a>, click Chat, then send him the group.<br />
+        </td>
+      </tr>
+    </table> -->
+
+    <hr style="border-bottom: 1px solid black;" />
+    <div v-for="(item, i) in downloadTasks" style="line-height: 1.8em;">
+      <table class="fenlan" style="border-bottom: 1px solid black; padding: 0 0 1em 0; margin: 1em 0;">
+        <tr>
+          <td>
+            <div style="width: 10em;display: inline-block;">群号 Group id</div>
+            <input type="text" class="middleinputtext" v-model.lazy="item.groupId" @mouseover="mouseDivType='groupId'"
+              @mouseleave="mouseDivType=''"><br />
+            <div style="width: 10em;display: inline-block;">群名 Group name</div>
+            <input type="text" class="middleinputtext" v-model.lazy="item.groupName">
+            <hr />文件大小 File size&nbsp;
+            <input type="text" class="smallinputtext" v-model.lazy="item.fileSizeMin" placeholder="default: 0"> mb -
+            <input type="text" class="smallinputtext" v-model.lazy="item.fileSizeMax" placeholder="default: ∞"> mb
+            <br /><input type="checkbox" v-model="item.isNoDuplicateFiles">不下载重复文件 Avoid duplicate
+            files
+            <hr />文件类型 File type:
+            <span v-for="(item2, j) in item.fileType" style="display: inline-block;">
+              <input type="checkbox" v-model="item.fileType[j]" :id="i+j">
+              <label :for="i+j">{{j}}</label><span v-if="j=='animation'">(gif)</span>&nbsp;
+            </span>
+            <!-- <span style="display: inline-block;">
+              <input type="checkbox" v-model="item.isAnimationToGif" :id="i+'a2g'">
+              <label :for="i+'a2g'">animation to gif</label>
+            </span> -->
+            <hr />文件名 Filename:
+            <span v-for="(item3, k) in item.fileName" style="display: inline-block;">
+              <input type="checkbox" v-model="item.fileName[k]" :id="i+k">
+              <label :for="i+k">{{k}}&nbsp;</label>
+            </span>
+            <hr />
+            <b>下载开关 | Download Switch</b><br />
+            <label class="switch">
+              <input type="checkbox" v-model="item.isRealTimeDownload">
+              <span class="slider"></span>
+            </label>
+            <span style="vertical-align: middle;">&nbsp;⚡️实时下载 Real-time download</span>
+            <br />
+            <label class="switch">
+              <input type="checkbox" v-model="item.isRangeDownload">
+              <span class="slider"></span>
+            </label>
+            <span style="vertical-align: middle;">&nbsp;🐌消息范围下载 Download by msg id range</span>
+            <br />　　　<input type="text" class="middleinputtext" v-model.lazy="item.rangeMinValue"
+              placeholder="default: 1"> -
+            <input type="text" class="middleinputtext" v-model.lazy="item.rangeMaxValue" placeholder="default: ∞">
+            <br /><br />
+            <button @click="deleteTask(i)" style="display: block; margin: 0 auto 1em auto; padding: 0.8em 1.8em;">
+              删除 | delete</button>
+          </td>
+          <td class="logTd">
+            <!-- <div class="logBox" :style="logBoxHeight"> {{downloadLogs[i].join('\n')}} </div> -->
+            <div class="logBox"></div>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <button style="display: block;margin: 2em auto; padding: 1em;" @click="newTask">+ 新建下载任务 New Downloading
+      Task</button>
+  </div>
+  <div v-if="mouseDivType" id="mouseDiv"></div>
+  <footer style="text-align: center; color: #fafafa;"> ⚘ xrcjb ⚘ </footer>
+  <script src="my-ad.js"></script>
+  <script src="script.js"></script>
+</body>
+
+</html>

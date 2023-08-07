@@ -1,0 +1,14 @@
+{
+  "dependencies": {
+    "67373-npm-common": "^1.0.7",
+    "chinese-conv": "^1.0.1",
+    "express": "^4.18.2",
+    "socket.io": "^4.7.1",
+    "sqlite3": "^5.1.6",
+    "telegram": "^2.17.10"
+  },
+  "scripts": {
+    "install-and-start": "npm install && node index.js",
+    "start": "node index.js"
+  }
+}

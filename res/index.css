@@ -1,0 +1,147 @@
+.em6 {
+  width: 6em;
+  display: inline-block;
+  text-align: left;
+}
+
+.em10 {
+  width: 10em;
+  display: inline-block;
+  text-align: left;
+}
+
+.inputBlock {
+  text-align: center;
+  border: 1px solid;
+  padding: 1.8em 0px;
+  margin: 1.8em 0px;
+}
+
+body {
+  line-height: 2.18;
+}
+
+code {
+  padding: .2em .4em;
+  margin: 0;
+  white-space: break-spaces;
+  background-color: rgb(228, 228, 228);
+  border-radius: 6px;
+}
+
+blockquote {
+  line-height: 1.8;
+  padding: 0 0.58em;
+  color: rgb(88, 88, 88);
+  border-left: .25em solid rgb(158, 158, 158);
+  margin: 0.58em 0;
+  font-size: small;
+}
+
+.fenlan {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.fenlan td {
+  padding: 0 1em;
+}
+
+br {
+  line-height: 20000px;
+}
+
+td {
+  vertical-align: top;
+}
+
+ol {
+  margin: 0;
+  padding: 0 1em;
+  line-height: 1.8;
+}
+
+.x-small-input-text {
+  width: 3em;
+}
+
+.smallinputtext {
+  width: 5em;
+}
+
+.middleinputtext {
+  width: 10em;
+}
+
+hr {
+  border: 0.1px solid rgb(228, 228, 228);
+}
+
+.logTd {
+  background-color: rgb(240, 240, 240);
+  padding: 8px !important;
+}
+
+.logBox {
+  overflow-y: scroll;
+  overflow-x: scroll;
+  /* white-space: pre-line; */
+  white-space: nowrap;
+  font-size: small;
+  line-height: 1.28em;
+}
+
+/* switch 开关 --------------------------------------- */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 20px;
+  vertical-align: middle;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  border-radius: 20px;
+  transition: 0.4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.4s;
+}
+
+.switch input {
+  display: none;
+}
+
+.switch input:checked+.slider {
+  background-color: #2196F3;
+}
+
+.switch input:checked+.slider:before {
+  transform: translateX(20px);
+}
+
+/* --------------------------------------- */
+
+#mouseDiv {
+  z-index: 67373;
+  position: fixed;
+  padding: 0em 1em;
+  border-radius: 0.5em;
+  background-color: beige;
+}
