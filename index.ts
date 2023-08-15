@@ -598,59 +598,9 @@ async function errDownCore() {
       await dbRun(sqlStr, sqlArr);
     };
     delete errBuff[errKeys[0]];
+    errKeys = Object.keys(errBuff);
   };
-
-
   isErrDownCore = false;
-
-
-
-
-
-  while (1) {
-    await lx.wait(1288);
-    if (showTgLogin) {
-      continue;
-    } else {
-      let sqlStr = `SELECT * FROM log WHERE status LIKE ? ORDER BY log_i DESC`;
-      let sqlArr = ['%[START]%']
-      let dbRet: any = await dbAll(sqlStr, sqlArr);
-      while (dbRet.length > 0) {
-        let { gIdAndIndex, msgId, log_i } = dbRet[0];
-        let groupId = gIdAndIndex.split('+')[0];
-        let index = gIdAndIndex.split('+')[1];
-        let likeStr = `%${groupId}%`;
-        let logIndex = 0;
-        for (let i in configs.downloadTasks) {
-          if (configs.downloadTasks[i].index == index) logIndex = Number(i) || 0;
-        };
-        sqlStr = `SELECT * FROM log WHERE gIdAndIndex LIKE ? AND msgId = ? AND log_i > ? AND status NOT LIKE ?`;
-        sqlArr = [likeStr, msgId, log_i, '%[START]%'];
-        let dbRet2: any = await dbAll(sqlStr, sqlArr);
-        if (dbRet2.length == 0) {
-          await downFile({
-            index,
-            msg: undefined,
-            groupId,
-            msgId,
-            type: '🔍',
-            logIndex,
-            isNoDuplicateFiles: false
-          });
-        };
-        // sqlStr = 'UPDATE log SET status = ? WHERE gIdAndIndex LIKE ? AND msgId = ? AND status LIKE ? AND log_i <= ?';
-        // sqlArr = ['[errReviewed]', likeStr, msgId, '%[START]%', log_i];
-        // await dbRun(sqlStr, sqlArr);
-        sqlStr = 'DELETE FROM log WHERE gIdAndIndex LIKE ? AND msgId = ? AND status LIKE ? AND log_i <= ?';
-        sqlArr = [likeStr, msgId, '%[START]%', log_i];
-        await dbRun(sqlStr, sqlArr);
-        dbRet = dbRet.filter((item: any) => {
-          return (!item.gIdAndIndex.includes(`${groupId}+`)) || (item.msgId != msgId)
-        });
-      };
-      break;
-    };
-  };
 };
 
 async function realTimeDown() {
@@ -735,17 +685,19 @@ async function downFile(params: any) {
   try {
     await downFile(params);
   } catch (e) {
+    let { groupId, msgId } = params;
+    let errKey: string = `groupId=${groupId};msgId=${msgId}`;
+    let errKeys = Object.keys(errBuff);
+    if (errKeys.indexOf(errKey) == -1) {
+      errBuff[errKey] = Object.assign({}, params, {
+        type: '🔍',
+        isNoDuplicateFiles: false
+      });
+    };
     errDown();
-
-
-
-
-
-
-
-
+    eLog(e);
   };
-}
+};
 
 async function downFileCore(params: any) {
   let { index, msg, groupId, msgId, type, logIndex, isNoDuplicateFiles } = params;
