@@ -1,3 +1,13 @@
+function copyUrl(url) {
+  navigator.clipboard.writeText(url);
+  const popup = document.getElementById('popup');
+  popup.innerText = '网址已复制 | Link copied';
+  popup.style.display = 'block';
+  setTimeout(() => {
+    popup.style.display = 'none';
+  }, 1888);
+};
+
 const test = 0;
 const socket = io();
 const { createApp } = Vue;
@@ -35,7 +45,7 @@ createApp({
     return {
       mouseDivType: '',
       test: test,
-      notes: test ? ['dfdsaf\nfdsfds\nfdfasf\nfsdfsdafs', 2, 3] : [],
+      notes: [],
       port: window.location.port,
       cookie: document.cookie,
       showPhoneNumber: test ? true : false,
@@ -67,13 +77,9 @@ createApp({
           useWSS: false, // false | Important. Most proxies cannot use SSL.
         },
       },
-      downloadTasks: test ? [DEFAULT_D_TASK, DEFAULT_D_TASK,] : [],
-      allLog: test ? [1, 2, 'fsff'] : [],
-      downloadLogs: test
-        ? [['ffsafdsa', '4253'],
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25],
-        []]
-        : [],
+      downloadTasks: [],
+      allLog: [],
+      downloadLogs: [],
     };
   },
   watch: {
@@ -89,30 +95,11 @@ createApp({
       },
       deep: true
     },
-    downloadLogs: {
-      handler() { // 这里只能用原生js，否则滚动条有延迟。可能 flush post 有用，不过没试过
-        try {
-          let eles = document.querySelectorAll('.logTd');
-          for (let i = 0; i < eles.length; i++) {
-            let height = eles[i].clientHeight - 16;
-            eles[i].querySelector('.logBox').style.height = height + 'px';
-          };
-        } catch { };
-        let ele = document.querySelectorAll('.logBox');
-        let n = ele.length
-        for (let i = 0; i < n; i++) {
-          let item = ele[i];
-          if (!this.downloadLogs[i]) this.downloadLogs[i] = [];
-          if (this.downloadLogs[i].length > 288) this.downloadLogs[i].shift();
-          // item.textContent = this.downloadLogs[i].join('\n');
-          item.innerHTML = this.downloadLogs[i].join('<br />');
-          if (item.scrollHeight - item.scrollTop - item.clientHeight < 50) {
-            item.scrollTop = item.scrollHeight;
-          };
-        };
-      },
-      deep: true
-    },
+    // downloadLogs: {
+    //   handler() { // 这里只能用原生js，否则滚动条有延迟。可能 flush post 有用，不过没试过
+    //   },
+    //   deep: true
+    // },
     mouseDivType: {
       handler(a) {
         let div = document.querySelector('#mouseDiv');
@@ -136,7 +123,11 @@ createApp({
     },
     downloadTasks: {
       handler() {
-        socket.emit('setTasks', { cookie: document.cookie, downloadTasks: this.downloadTasks });
+        socket.emit('setTasks', {
+          cookie: document.cookie,
+          downloadTasks: this.downloadTasks,
+          type: 'add'
+        });
       },
       deep: true
     },
@@ -186,14 +177,27 @@ createApp({
       if (confirm('确定要删除该任务吗？删除后不可恢复。\n\nAre you sure to delete this task? It\'s a no-restore opreation.')) {
         this.downloadTasks.splice(i, 1);
         this.downloadLogs.splice(i, 1);
-        socket.emit('setTasks', { cookie: document.cookie, downloadTasks: this.downloadTasks });
+        downloadLogsChange(this, true);
+        socket.emit('setTasks', {
+          cookie: document.cookie,
+          downloadTasks: this.downloadTasks,
+          type: 'del',
+          delIndex: i
+        });
       };
     },
     newTask() {
       this.downloadTasks.push(DEFAULT_D_TASK);
       this.downloadLogs.push([]);
+      downloadLogsChange(this, true);
     },
     getData() { socket.emit('getData', { cookie: document.cookie }) },
+    // copyUrl(groupId, msgId) {
+    //   let url = `https://t.me/c/${groupId.replace('-100', '')}/${msgId}`;
+    // copyUrl(url) {
+    //   console.log(1111);
+    //   navigator.clipboard.writeText(url);
+    // },
   },
   mounted() {
     socket.emit('getData', { cookie: document.cookie });
@@ -204,6 +208,14 @@ createApp({
       this.status = data.status;
       this.tgParams = data.tgParams;
       this.downloadTasks = data.downloadTasks;
+      this.downloadLogs = data.downloadLogs;
+      downloadLogsChange(this, true);
+      let ele = document.querySelectorAll('.logBox');
+      let n = ele.length;
+      for (let i = 0; i < n; i++) {
+        // let item = ele[i];
+        ele[i].scrollTop = ele[i].scrollHeight;
+      };
       // if (!this.downloadLogs.length) {
       //   this.downloadLogs = [];
       //   for (let i in this.downloadTasks) this.downloadLogs[i] = [];
@@ -222,10 +234,14 @@ createApp({
     socket.on('getPhoneNumber', () => this.showPhoneNumber = true);
     socket.on('getPassword', () => this.showPassword = true);
     socket.on('getPhoneCode', () => this.showPhoneCode = true);
-    socket.on('downloadLogs', (data) => {
-      if (!this.downloadLogs[data.i]) this.downloadLogs[data.i] = [];
-      this.downloadLogs[data.i].push(data.html);
+    socket.on('downloadLogs', (datas) => {
+      for (let data of datas) {
+        if (!this.downloadLogs[data.i]) this.downloadLogs[data.i] = [];
+        this.downloadLogs[data.i].push(data.html);
+      };
+      downloadLogsChange(this);
     });
+    // socket.on('downloadLogsInit', data => { this.downloadLogs = data });
     socket.on('addMinValue', (data) => { this.downloadTasks[data.i].rangeMinValue = data.value });
     socket.on('note', (data) => this.notes.push(data));
     socket.emit('getData', { cookie: document.cookie });
@@ -242,6 +258,30 @@ createApp({
     // }, 2000);
   },
 }).mount('body');
+
+function downloadLogsChange(that, init) {
+  if (init) {
+    try {
+      let eles = document.querySelectorAll('.logTd');
+      for (let i = 0; i < eles.length; i++) {
+        let height = eles[i].clientHeight - 16;
+        eles[i].querySelector('.logBox').style.height = height + 'px';
+      };
+    } catch { };
+  };
+  let ele = document.querySelectorAll('.logBox');
+  let n = ele.length;
+  for (let i = 0; i < n; i++) {
+    let item = ele[i];
+    if (!that.downloadLogs[i]) that.downloadLogs[i] = [];
+    if (that.downloadLogs[i].length > 288) that.downloadLogs[i].shift();
+    // item.textContent = this.downloadLogs[i].join('\n');
+    item.innerHTML = that.downloadLogs[i].join('<br />');
+    if (item.scrollHeight - item.scrollTop - item.clientHeight < 50) {
+      item.scrollTop = item.scrollHeight;
+    };
+  };
+};
 
 
 // let ele = document.querySelectorAll('.logBox');

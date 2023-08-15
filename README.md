@@ -44,6 +44,7 @@ Feel free to submit issues for any bugs, questions, comments or suggestions.
 
 ### Future Features
 - 自动将动图 animation(mp4) 转为 gif 格式 | Automatically convert animation(mp4) to gif format;
+- 增加对 webpage 格式的 media 的支持 | Adding support for media in webpage format.
 
 ### Acknowledgements
 This program was inspired by https://github.com/Dineshkarthik/telegram_media_downloader/

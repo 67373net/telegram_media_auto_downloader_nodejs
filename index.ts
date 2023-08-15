@@ -8,11 +8,21 @@ const { Api, TelegramClient } = require("telegram");
 const { StringSession } = require("telegram/sessions");
 const express = require('express');
 const os = require('os');
+const randomstring = require("randomstring");
 
 let db: any;
 let io: any;
 let gramJsClient: any;
 let configsPath = './download/configs.json';
+let logsPath = './download/logs.json';
+let downloadLogs: any = [];
+try {
+  downloadLogs = fs.readFileSync(logsPath, 'utf-8');
+  downloadLogs = JSON.parse(downloadLogs);
+} catch { };
+let logBuff = [];
+let isErrDownCore = false;
+let errBuff: any = {};
 let configs = getConfigs();
 let showTgLogin: boolean = true;
 let maxMsgIds: number[] = [];
@@ -30,6 +40,12 @@ async function main(): Promise<void> {
   errDown();
   realTimeDown();
   rangeDown();
+  setInterval(() => {
+    if (io && (logBuff.length > 0)) {
+      io.to('67373.net').emit('downloadLogs', logBuff);
+      logBuff = [];
+    };
+  }, 888);
 };
 
 async function dbInit() {
@@ -43,7 +59,7 @@ async function dbInit() {
   });
   let sql = `CREATE TABLE IF NOT EXISTS log `
     + ` (log_i INTEGER PRIMARY KEY AUTOINCREMENT, `
-    + ` groupId TEXT, `
+    + ` gIdAndIndex TEXT, `
     + ` msgId INTEGER, `
     + ` type TEXT, `
     + ` msgTime TEXT, `
@@ -127,7 +143,8 @@ async function gramJsInitCheck() {
           showTgLogin
         },
         tgParams: configs.tgParams,
-        downloadTasks: configs.downloadTasks
+        downloadTasks: configs.downloadTasks,
+        downloadLogs: downloadLogs
       });
     };
   } catch { };
@@ -160,7 +177,8 @@ function startServer() {
           showTgLogin
         },
         tgParams: configs.tgParams,
-        downloadTasks: configs.downloadTasks
+        downloadTasks: configs.downloadTasks,
+        downloadLogs: downloadLogs
       });
       // socket.emit('sendData', { isTgLoggedin, tgParams: configs.tgParams });
     });
@@ -193,6 +211,13 @@ function startServer() {
     socket.on('setTasks', function (data: any) {
       if (!checkCookie(data, socket)) return 'cookie fail';
       configs.downloadTasks = data.downloadTasks;
+      if (data.delIndex) downloadLogs.splice(data.delIndex, 1);
+      for (let i in configs.downloadTasks) {
+        if (configs.downloadTasks[i].index === undefined) {
+          configs.downloadTasks[i].index = configs.indexCount;
+          configs.indexCount++;
+        };
+      };
       writeConfigs();
     });
   });
@@ -224,6 +249,7 @@ function getConfigs(): Configs {
           useWSS: false,
         },
       },
+      indexCount: 0,
       downloadTasks: [],
     };
     writeConfigs(configs);
@@ -343,15 +369,21 @@ function eLog(e: any) {
 function dLog(i: number, logs: any) {
   // texts = [].concat(texts);
   let styleObj = {
-    default: ['\x1b[0m%s\x1b[0m', '<span">', '</span>'],
-    green: ['\x1b[32m%s\x1b[0m', '<span style="color: #8c8">', '</span>'],
-    gray: ['\x1b[90m%s\x1b[0m', '<span style="color: #aaa">', '</span>'],
+    default: ['\x1b[0m%s\x1b[0m', '<span onclick="">', '</span>'],
+    green: ['\x1b[32m%s\x1b[0m', '<span style="color: #8c8" onclick="">', '</span>'],
+    gray: ['\x1b[90m%s\x1b[0m', '<span style="color: #aaa" onclick="">', '</span>'],
   }
   for (let log of logs) {
     let style = styleObj[log[0]];
+    if (log[2]) style[1] = style[1].replace(`onclick=""`, `onclick="copyUrl('${log[2]}')"`)
     let text: string = `${configs.downloadTasks[i].groupName.substring(0, 8)} ${log[1]}`;
     console.log(style[0], text, '\x1b[0m');
-    io.to('67373.net').emit('downloadLogs', { i, html: `${style[1]}${log[1]}${style[2]}` });
+    let html = `${style[1]}${log[1]}${style[2]}`;
+    if (!downloadLogs[i]) downloadLogs[i] = [];
+    downloadLogs[i].push(html);
+    if (downloadLogs[i].length > 288) downloadLogs[i].shift();
+    fs.writeFileSync(logsPath, lx.jsonToStr(downloadLogs));
+    logBuff.push({ i, html });
   };
 };
 
@@ -391,13 +423,13 @@ async function msgToUsername(msg: any) {
   return username;
 }
 
-async function mediaInfo(msg: any) {
+async function mediaInfo(msg: any, index: number) {
   let filePath: string = 'download/';
   let type: string = 'non';
   let suffix: string = 'non';
   let fileName: string = '';
-  let timeStamp = time2(msg.date * 1000);
-  try { filePath += msg.peerId.channelId } catch { };
+  let timeStamp = time2(msg.date * 1000).long;
+  try { filePath += msg.peerId.channelId + '_' + index } catch { };
   let msgText = msg.message;
   let fileSize: number = 0;
   let idHash: string | undefined = undefined;
@@ -464,13 +496,18 @@ function time2(a?: any) {
     Aug: '08', Sept: '09', Sep: '09', Oct: '10', Nov: '11', Dec: '12',
   };
   let str = a ? String(new Date(a)) : Date();
-  let ret: string = str.substring(13, 15)
+  let long = str.substring(13, 15)
     + mon[str.substring(4, 7)]
     + str.substring(8, 10)
     + '-' + str.substring(0, 3)
     + '-' + str.substring(16, 24);
-  ret = ret.replace(/:/g, '');
-  return ret;
+  long = long.replace(/:/g, '');
+  let short = str.substring(13, 15)
+    + mon[str.substring(4, 7)]
+    + str.substring(8, 10)
+    + ' ' + str.substring(16, 24);
+  short = short.replace(/:/g, '');
+  return { long, short };
 };
 
 /* ❇️ ❇️ ❇️ ❇️ ❇️ ❇️ ❇️ ❇️ */
@@ -503,41 +540,117 @@ async function myIdtoMsg(groupId: any, currentId: number, maxId: number) {
 };
 
 async function errDown() {
-  let check = setInterval(async () => {
+  while (1) {
+    await lx.wait(1288);
     if (showTgLogin) {
-      return;
+      continue;
     } else {
-      let sqlStr = `SELECT * FROM log WHERE status=? ORDER BY log_i DESC`;
-      let sqlArr = ['start']
+      let sqlStr = `SELECT * FROM log WHERE status LIKE ? ORDER BY log_i DESC`;
+      let sqlArr = ['%[START]%']
       let dbRet: any = await dbAll(sqlStr, sqlArr);
-      while (dbRet.length > 0) {
-        let { groupId, msgId, log_i } = dbRet[0];
-        sqlStr = `SELECT * FROM log WHERE groupId = ? AND msgId = ? ORDER BY log_i DESC`;
-        sqlArr = [groupId, msgId];
-        let dbRet2: any = await dbAll(sqlStr, sqlArr);
-        let downRet: any = {};
-        if (dbRet2[0].status == 'start') {
-          downRet = await downFile({
+      for (let i = 0; i < dbRet.length; i++) {
+        let { gIdAndIndex, msgId, log_i } = dbRet[i];
+        let groupId = gIdAndIndex.split('+')[0];
+        let index = gIdAndIndex.split('+')[1];
+        let logIndex = 0;
+        for (let i in configs.downloadTasks) {
+          if (configs.downloadTasks[i].index == index) logIndex = Number(i) || 0;
+        };
+        let errKey: string = `groupId=${groupId};msgId=${msgId}`;
+        let errKeys = Object.keys(errBuff);
+        if (errKeys.indexOf(errKey) == -1) {
+          errBuff[errKey] = {
+            index,
             msg: undefined,
             groupId,
             msgId,
             type: '🔍',
-            logIndex: 0,
+            logIndex,
+            isNoDuplicateFiles: false
+          }
+        };
+      };
+      break;
+    };
+  };
+  if (!isErrDownCore) errDownCore();
+};
+
+async function errDownCore() {
+  isErrDownCore = true;
+  let errKeys = Object.keys(errBuff);
+  while (errKeys.length > 0) {
+    let item = errBuff[errKeys[0]];
+    let gIdAndIndex = item.groupId + '+' + item.index;
+    let likeStr = `%${item.groupId}%`;
+    let sqlStr = `SELECT * FROM log WHERE gIdAndIndex = ? AND msgId = ? ORDER BY log_i DESC`;
+    let sqlArr = [gIdAndIndex, item.msgId];
+    let dbRet: any = await dbAll(sqlStr, sqlArr);
+    if ((dbRet.length == 0) || (dbRet[0].status.includes('['))) {
+      await downFile(item);
+    };
+    // sqlStr = 'UPDATE log SET status = ? WHERE gIdAndIndex LIKE ? AND msgId = ? AND status LIKE ? AND log_i <= ?';
+    // sqlArr = ['[errReviewed]', likeStr, msgId, '%[START]%', log_i];
+    // await dbRun(sqlStr, sqlArr);
+    if (dbRet.length > 0) {
+      sqlStr = 'DELETE FROM log WHERE gIdAndIndex LIKE ? AND msgId = ? AND status LIKE ? AND log_i <= ?';
+      sqlArr = [likeStr, item.msgId, '%[START]%', dbRet[0].log_i];
+      await dbRun(sqlStr, sqlArr);
+    };
+    delete errBuff[errKeys[0]];
+  };
+
+
+  isErrDownCore = false;
+
+
+
+
+
+  while (1) {
+    await lx.wait(1288);
+    if (showTgLogin) {
+      continue;
+    } else {
+      let sqlStr = `SELECT * FROM log WHERE status LIKE ? ORDER BY log_i DESC`;
+      let sqlArr = ['%[START]%']
+      let dbRet: any = await dbAll(sqlStr, sqlArr);
+      while (dbRet.length > 0) {
+        let { gIdAndIndex, msgId, log_i } = dbRet[0];
+        let groupId = gIdAndIndex.split('+')[0];
+        let index = gIdAndIndex.split('+')[1];
+        let likeStr = `%${groupId}%`;
+        let logIndex = 0;
+        for (let i in configs.downloadTasks) {
+          if (configs.downloadTasks[i].index == index) logIndex = Number(i) || 0;
+        };
+        sqlStr = `SELECT * FROM log WHERE gIdAndIndex LIKE ? AND msgId = ? AND log_i > ? AND status NOT LIKE ?`;
+        sqlArr = [likeStr, msgId, log_i, '%[START]%'];
+        let dbRet2: any = await dbAll(sqlStr, sqlArr);
+        if (dbRet2.length == 0) {
+          await downFile({
+            index,
+            msg: undefined,
+            groupId,
+            msgId,
+            type: '🔍',
+            logIndex,
             isNoDuplicateFiles: false
           });
         };
-        if ((dbRet2[0].status != 'start')) { /*后面已经处理过了，或者下载成功了*/
-          sqlStr = 'UPDATE log SET status = ? WHERE groupId = ? AND msgId = ? AND status = ? AND log_i <= ?';
-          sqlArr = ['errSolved', groupId, msgId, 'start', log_i];
-          await dbRun(sqlStr, sqlArr);
-          dbRet = dbRet.filter((item: any) => {
-            return (item.groupId != groupId) || (item.msgId != msgId)
-          });
-        };
+        // sqlStr = 'UPDATE log SET status = ? WHERE gIdAndIndex LIKE ? AND msgId = ? AND status LIKE ? AND log_i <= ?';
+        // sqlArr = ['[errReviewed]', likeStr, msgId, '%[START]%', log_i];
+        // await dbRun(sqlStr, sqlArr);
+        sqlStr = 'DELETE FROM log WHERE gIdAndIndex LIKE ? AND msgId = ? AND status LIKE ? AND log_i <= ?';
+        sqlArr = [likeStr, msgId, '%[START]%', log_i];
+        await dbRun(sqlStr, sqlArr);
+        dbRet = dbRet.filter((item: any) => {
+          return (!item.gIdAndIndex.includes(`${groupId}+`)) || (item.msgId != msgId)
+        });
       };
-      clearInterval(check);
+      break;
     };
-  }, 1000);
+  };
 };
 
 async function realTimeDown() {
@@ -556,6 +669,7 @@ async function realTimeDown() {
           if (task.groupId == peerId) {
             if (msgId) maxMsgIds[i] = msgId;
             if (task.isRealTimeDownload) downFile({
+              index: task.index,
               msg: update.message,
               groupId: undefined,
               msgId: undefined,
@@ -598,6 +712,7 @@ async function rangeDown() {
         let msg = await myIdtoMsg(task.groupId, currentId, maxId);
         if (msg) {
           await downFile({
+            index: task.index,
             msg: msg,
             groupId: task.groupId,
             msgId: currentId,
@@ -617,97 +732,132 @@ async function rangeDown() {
 };
 
 async function downFile(params: any) {
-  let { msg, groupId, msgId, type, logIndex, isNoDuplicateFiles } = params;
+  try {
+    await downFile(params);
+  } catch (e) {
+    errDown();
+
+
+
+
+
+
+
+
+  };
+}
+
+async function downFileCore(params: any) {
+  let { index, msg, groupId, msgId, type, logIndex, isNoDuplicateFiles } = params;
   let task = configs.downloadTasks[logIndex];
+  let gIdAndIndex = groupId + '+' + index;
   let mInfo: any;
-  if (!msg && !(groupId && msgId)) return 'missing params';
+  let logTime = String(Date.now()); // time2().short;
+  if (!msg && !(index && groupId && msgId)) {
+    eLog(`downFile err: ${params}`);
+    return 'missing params';
+  }
   if (!msg) {
-    let sqlStr = `SELECT * FROM log WHERE groupId = ? AND msgId = ?`;
-    let sqlArr = [groupId, msgId];
-    let dbRet: any = await dbAll(sqlStr, sqlArr);
-    for (let item of dbRet) {
-      if (item.status == '[NO MESSAGE]' || item.status == '[NO MEDIA]') {
-        let link = msgId;
-        try {
-          link = `t.me/c/${groupId.replace('-100', '')}/${msgId}`;
-        } catch { };
-        let log: any = [
-          ['gray', `${type} ${link} old data: ${item.status}`]
-        ];
-        dLog(logIndex, log);
-        return log;
-      }
-    };
+    // let sqlStr = `SELECT * FROM log WHERE gIdAndIndex = ? AND msgId = ?`;
+    // let sqlArr = [gIdAndIndex, msgId];
+    // let dbRet: any = await dbAll(sqlStr, sqlArr);
+    // for (let item of dbRet) {
+    //   if (item.status == '[NO MSG]' || item.status == '[NO MEDIA]') {
+    //     let link = msgId;
+    //     try {
+    //       link = `t.me/c/${groupId.replace('-100', '')}/${msgId}`;
+    //     } catch { };
+    //     let log: any = [
+    //       ['gray', `${type} ${msgId} old data: ${item.status}`, link]
+    //     ];
+    //     dLog(logIndex, log);
+    //     return log;
+    //   }
+    // };
     msg = await gramJsClient.getMessages(groupId, { ids: [msgId] });
     msg = msg[0];
   };
   let status: string = '';
   let link: string = '';
   let msgTime: string = '';
+  let msgTime2: string = '';
   let username = await msgToUsername(msg);
   if (!msg || msg == 'no msg') {
-    status = '[NO MESSAGE]';
+    status = '[NO MSG]';
   } else {
-    try { groupId = '-100' + msg.peerId.channelId } catch { };
+    try {
+      groupId = '-100' + msg.peerId.channelId;
+      gIdAndIndex = groupId + '+' + index;
+    } catch { };
     try { msgId = msg.id } catch { };
-    try { msgTime = time2(msg.date * 1000) } catch { };
+    try {
+      msgTime = time2(msg.date * 1000).long;
+      msgTime2 = ' ' + time2(msg.date * 1000).short;
+    } catch { };
     if (!msg.media) {
       status = '[NO MEDIA]';
     } else if (!msg.media.photo && !msg.media.document) {
       status = '[NO PHOTO/DOC]';
     } else {
-      mInfo = await mediaInfo(msg);
+      mInfo = await mediaInfo(msg, index);
       // if (test) console.log(mInfo);
       if (task.fileSizeMin && (mInfo.fileSize < task.fileSizeMin * 1024 * 1024))
-        status = `[FILE TOO SMALL] | ${(mInfo.fileSize / 1024 / 1024).toFixed(2)} mb`;
+        status = `[FILE TOO SMALL] ${(mInfo.fileSize / 1024 / 1024).toFixed(2)} mb`;
       if (task.fileSizeMax && (mInfo.fileSize > task.fileSizeMax * 1024 * 1024))
-        status = `[FILE TOO BIG] | ${(mInfo.fileSize / 1024 / 1024).toFixed(2)} mb`;
+        status = `[FILE TOO BIG] ${(mInfo.fileSize / 1024 / 1024).toFixed(2)} mb`;
       let fileType = mInfo.type.split('|');
       let fileTypeCheck = fileType.filter((item: any) => task.fileType[item]);
-      if (fileTypeCheck.length == 0) status = `[IGNORE TYPE] | ${mInfo.type}`;
+      if (fileTypeCheck.length == 0) status = `[0TYPE] ${mInfo.type}`;
     };
   };
   link = `t.me/c/${groupId.replace('-100', '')}/${msgId}`;
   if (status) {
-    let sqlStr = `INSERT INTO log (groupId, msgId, type, msgTime, logTime, link, status)`;
-    sqlStr += `VALUES (?, ?, ?, ?, ?, ?, ?)`;
-    let sqlArr = [groupId, msgId, type, msgTime, time2(), link, status];
-    await dbRun(sqlStr, sqlArr);
     let log: any = [];
-    if (status != '[NO MESSAGE]')
+    if (status != '[NO MSG]')
       log.push(['default', `${type} ${username}: ${(msg && msg.message) ? msg.message : 'null'}`]);
-    log.push(['gray', `　 ${link} ${status}`]);
+    log.push(['gray', `　 ${msgId}${msgTime2} ${status}`, link]);
     dLog(logIndex, log);
     return log;
+    let sqlStr = `SELECT * FROM log WHERE gIdAndIndex = ? AND msgId = ? AND status = ?`;
+    let sqlArr = [gIdAndIndex, msgId, status];
+    let dbRet: any = await dbAll(sqlStr, sqlArr);
+    if (dbRet.length == 0) {
+      let sqlStr = `INSERT INTO log (gIdAndIndex, msgId, type, msgTime, logTime, link, status)`;
+      sqlStr += `VALUES (?, ?, ?, ?, ?, ?, ?)`;
+      // let sqlArr = [gIdAndIndex, msgId, type, msgTime, time2().long, link, status];
+      let sqlArr = [gIdAndIndex, msgId, type, '', logTime, '', status];
+      await dbRun(sqlStr, sqlArr);
+    };
   };
   if (isNoDuplicateFiles) {
-    let sqlStr = `SELECT * FROM log WHERE groupId = ? AND status = ?`;
-    let sqlArr = [groupId, mInfo.idHash];
+    let sqlStr = `SELECT * FROM log WHERE gIdAndIndex = ? AND status LIKE ?`;
+    let sqlArr = [gIdAndIndex, `%${mInfo.idHash}%`];
     let dbRet: any = await dbAll(sqlStr, sqlArr);
     if (dbRet.length > 0) {
-      let sqlStr = `INSERT INTO log (groupId, msgId, type, msgTime, logTime, link, status)`;
-      sqlStr += `VALUES (?, ?, ?, ?, ?, ?, ?)`;
-      let sqlArr = [groupId, msgId, type, msgTime, time2(), link, mInfo.idHash];
-      await dbRun(sqlStr, sqlArr);
+      // let sqlStr = `INSERT INTO log (gIdAndIndex, msgId, type, msgTime, logTime, link, status)`;
+      // sqlStr += `VALUES (?, ?, ?, ?, ?, ?, ?)`;
+      // // let sqlArr = [gIdAndIndex, msgId, type, msgTime, time2().long, link, mInfo.idHash];
+      // let sqlArr = [gIdAndIndex, msgId, type, '', logTime, '', `[DUPLICATE]`];
+      // await dbRun(sqlStr, sqlArr);
       let log = [
         ['default', `${type} ${username}: ${msg.message || 'null'}`],
-        ['gray', `　 ${link} [DUPLICATE FILE] ${mInfo.fileName || 'photo ' + mInfo.timeStamp}`],
+        ['gray', `　 ${msgId}${msgTime2} [DUPLICATE FILE] ${mInfo.fileName || 'photo ' + mInfo.timeStamp}`, link],
       ];
       dLog(logIndex, log);
       return log;
     };
   };
-  let sqlStr = `INSERT INTO log (groupId, msgId, type, msgTime, logTime, link, status)`;
+  let sqlStr = `INSERT INTO log (gIdAndIndex, msgId, type, msgTime, logTime, link, status)`;
   sqlStr += `VALUES (?, ?, ?, ?, ?, ?, ?)`;
-  let logTime = time2();
-  let sqlArr = [groupId, msgId, type, mInfo.timeStamp, logTime, link, 'start'];
+  // let logTime = time2().long;
+  // let sqlArr = [gIdAndIndex, msgId, type, mInfo.timeStamp, logTime, link, 'start'];
+  let sqlArr = [gIdAndIndex, msgId, type, '', logTime, '', `[START]-${mInfo.idHash}`];
   await dbRun(sqlStr, sqlArr);
   let log = [
     ['default', `${type} ${username}: ${msg.message || 'null'}`],
-    ['green', `　 ${link} [START DOWN] ${mInfo.fileName || mInfo.timeStamp}`],
+    ['green', `　 ${msgId}${msgTime2} [START DOWN] ${mInfo.fileName || mInfo.timeStamp}`, link],
   ];
   dLog(logIndex, log);
-
   try { fs.mkdirSync(mInfo.filePath, { recursive: true }); } catch { };
   let nameConf = task['fileName'];
   let fileName: any = mInfo.fileName ? [mInfo.fileName] : [];
@@ -720,25 +870,39 @@ async function downFile(params: any) {
   if (mInfo.type == 'photo') fileName += mInfo.suffix;
   if (nameConf['转简体']) fileName = chineseConv.sify(fileName);
   if (nameConf['转繁体']) fileName = chineseConv.tify(fileName);
+  function addAfterDot(a: string, b: string): string {
+    let dotPosition = a.lastIndexOf('.');
+    if (dotPosition == -1) dotPosition = Infinity;
+    a = a.substring(0, dotPosition)
+      + b + a.substring(dotPosition, Infinity);
+    return a;
+  };
+  fileName = addAfterDot(fileName, randomstring.generate(8));
   fileName = lx.goodFilename(fileName);
   if (!fileName.match(/.*\.\w{1,18}$/igm)) fileName += mInfo.suffix;
   let oldFullPath = mInfo.filePath + fileName;
   let fullPath = oldFullPath;
-  let dotPosition = oldFullPath.lastIndexOf('.');
-  if (dotPosition == -1) dotPosition = Infinity;
+  const buffer = await gramJsClient.downloadMedia(msg.media);
   let count = 1;
   while (fs.existsSync(fullPath)) {
-    fullPath = oldFullPath.substring(0, dotPosition)
-      + count + oldFullPath.substring(dotPosition, Infinity);
+    fullPath = addAfterDot(oldFullPath, String(count));
     count++;
   };
-  const buffer = await gramJsClient.downloadMedia(msg.media);
   fs.writeFileSync(fullPath, buffer);
-  sqlStr = 'UPDATE log SET status = ? WHERE groupId = ? AND msgId = ? AND logTime = ? AND status = ?';
-  sqlArr = [mInfo.idHash, groupId, msgId, logTime, 'start'];
-  await dbRun(sqlStr, sqlArr);
+  sqlStr = 'SELECT * FROM log WHERE gIdAndIndex = ? AND msgId = ? AND status = ?';
+  sqlArr = [gIdAndIndex, msgId, mInfo.idHash];
+  let dbRet: any = await dbAll(sqlStr, sqlArr);
+  if (dbRet.length > 0) {
+    sqlStr = 'DELETE FROM log WHERE gIdAndIndex = ? AND msgId = ? AND logTime = ? AND status LIKE ?';
+    sqlArr = [gIdAndIndex, msgId, logTime, '%[START]%'];
+    await dbRun(sqlStr, sqlArr);
+  } else {
+    sqlStr = 'UPDATE log SET status = ? WHERE gIdAndIndex = ? AND msgId = ? AND logTime = ? AND status LIKE ?';
+    sqlArr = [mInfo.idHash, gIdAndIndex, msgId, logTime, '%[START]%'];
+    await dbRun(sqlStr, sqlArr);
+  };
   log = [
-    ['green', `　 ${link} [DONE] ${fullPath.replace(mInfo.filePath, '')}`],
+    ['green', `　 ${msgId}${msgTime2} [DONE] ${fullPath.replace(mInfo.filePath, '')}`, link],
   ];
   dLog(logIndex, log)
   return { done: true };
@@ -768,7 +932,9 @@ interface Configs {
     },
   },
   stringSession: string,
+  indexCount: number,
   downloadTasks: [] | [{
+    index: number,
     groupId: string | number,
     groupName: string,
     isRealTimeDownload: boolean,
