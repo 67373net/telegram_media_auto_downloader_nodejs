@@ -54,6 +54,7 @@ var StringSession = require("telegram/sessions").StringSession;
 var express = require('express');
 var os = require('os');
 var randomstring = require("randomstring");
+var nodeEmoji = require("node-emoji");
 var db;
 var io;
 var gramJsClient;
@@ -67,6 +68,8 @@ try {
 catch (_b) { }
 ;
 var logBuff = [];
+var isErrDownCore = false;
+var errBuff = {};
 var configs = getConfigs();
 var showTgLogin = true;
 var maxMsgIds = [];
@@ -92,9 +95,9 @@ function main() {
                     return [4 /*yield*/, tgLoginFromConfigs()];
                 case 3:
                     _a.sent();
-                    setInterval(gramJsInitCheck, 1000); // 防止掉线
+                    setInterval(gramJsInitCheck, 1000); // 防止掉线，获取群名
                     startServer();
-                    errDown();
+                    errFromDb();
                     realTimeDown();
                     rangeDown();
                     setInterval(function () {
@@ -237,7 +240,7 @@ function tgLoginFromConfigs() {
 ;
 function gramJsInitCheck() {
     return __awaiter(this, void 0, void 0, function () {
-        var _a, _b, _c, _i, i, task, result, _d;
+        var oldLog_1, _a, _b, _c, _i, i, task, result, _d;
         return __generator(this, function (_e) {
             switch (_e.label) {
                 case 0:
@@ -246,6 +249,19 @@ function gramJsInitCheck() {
                 case 1:
                     _e.sent();
                     gramJsClient.setLogLevel("warn");
+                    if (!gramJsClient._log.logReset) {
+                        try {
+                            oldLog_1 = gramJsClient._log.log;
+                            gramJsClient._log.log = function () {
+                                // console.log(123456789, ...arguments);
+                                oldLog_1.apply(gramJsClient._log, arguments);
+                            };
+                            gramJsClient._log.logReset = true;
+                        }
+                        catch (_f) { }
+                        ;
+                    }
+                    ;
                     _a = configs.downloadTasks;
                     _b = [];
                     for (_c in _a)
@@ -854,16 +870,16 @@ function myIdtoMsg(groupId, currentId, maxId) {
     });
 }
 ;
-function errDown() {
+function errFromDb() {
     return __awaiter(this, void 0, void 0, function () {
-        var sqlStr, sqlArr, dbRet, _loop_1;
-        return __generator(this, function (_a) {
-            switch (_a.label) {
+        var sqlStr, sqlArr, dbRet, i, _a, gIdAndIndex, msgId, log_i, groupId, index, logIndex, i_1, errKey, errKeys;
+        return __generator(this, function (_b) {
+            switch (_b.label) {
                 case 0:
-                    if (!1) return [3 /*break*/, 8];
+                    if (!1) return [3 /*break*/, 5];
                     return [4 /*yield*/, lx.wait(1288)];
                 case 1:
-                    _a.sent();
+                    _b.sent();
                     if (!showTgLogin) return [3 /*break*/, 2];
                     return [3 /*break*/, 0];
                 case 2:
@@ -871,69 +887,89 @@ function errDown() {
                     sqlArr = ['%[START]%'];
                     return [4 /*yield*/, dbAll(sqlStr, sqlArr)];
                 case 3:
-                    dbRet = _a.sent();
-                    _loop_1 = function () {
-                        var _b, gIdAndIndex, msgId, log_i, groupId, index, likeStr, logIndex, i, dbRet2;
-                        return __generator(this, function (_c) {
-                            switch (_c.label) {
-                                case 0:
-                                    _b = dbRet[0], gIdAndIndex = _b.gIdAndIndex, msgId = _b.msgId, log_i = _b.log_i;
-                                    groupId = gIdAndIndex.split('+')[0];
-                                    index = gIdAndIndex.split('+')[1];
-                                    likeStr = "%".concat(groupId, "%");
-                                    logIndex = 0;
-                                    for (i in configs.downloadTasks) {
-                                        if (configs.downloadTasks[i].index == index)
-                                            logIndex = Number(i) || 0;
-                                    }
-                                    ;
-                                    sqlStr = "SELECT * FROM log WHERE gIdAndIndex LIKE ? AND msgId = ? AND log_i > ? AND status NOT LIKE ?";
-                                    sqlArr = [likeStr, msgId, log_i, '%[START]%'];
-                                    return [4 /*yield*/, dbAll(sqlStr, sqlArr)];
-                                case 1:
-                                    dbRet2 = _c.sent();
-                                    if (!(dbRet2.length == 0)) return [3 /*break*/, 3];
-                                    return [4 /*yield*/, downFile({
-                                            index: index,
-                                            msg: undefined,
-                                            groupId: groupId,
-                                            msgId: msgId,
-                                            type: '🔍',
-                                            logIndex: logIndex,
-                                            isNoDuplicateFiles: false
-                                        })];
-                                case 2:
-                                    _c.sent();
-                                    _c.label = 3;
-                                case 3:
-                                    ;
-                                    sqlStr = 'UPDATE log SET status = ? WHERE gIdAndIndex LIKE ? AND msgId = ? AND status LIKE ? AND log_i <= ?';
-                                    sqlArr = ['[errReviewed]', likeStr, msgId, '%[START]%', log_i];
-                                    return [4 /*yield*/, dbRun(sqlStr, sqlArr)];
-                                case 4:
-                                    _c.sent();
-                                    dbRet = dbRet.filter(function (item) {
-                                        return (!item.gIdAndIndex.includes("".concat(groupId, "+"))) || (item.msgId != msgId);
-                                    });
-                                    return [2 /*return*/];
-                            }
-                        });
-                    };
-                    _a.label = 4;
-                case 4:
-                    if (!(dbRet.length > 0)) return [3 /*break*/, 6];
-                    return [5 /*yield**/, _loop_1()];
-                case 5:
-                    _a.sent();
-                    return [3 /*break*/, 4];
-                case 6:
+                    dbRet = _b.sent();
+                    for (i = 0; i < dbRet.length; i++) {
+                        _a = dbRet[i], gIdAndIndex = _a.gIdAndIndex, msgId = _a.msgId, log_i = _a.log_i;
+                        groupId = gIdAndIndex.split('+')[0];
+                        index = gIdAndIndex.split('+')[1];
+                        logIndex = 0;
+                        for (i_1 in configs.downloadTasks) {
+                            if (configs.downloadTasks[i_1].index == index)
+                                logIndex = Number(i_1) || 0;
+                        }
+                        ;
+                        errKey = "groupId=".concat(groupId, ";msgId=").concat(msgId);
+                        errKeys = Object.keys(errBuff);
+                        if (errKeys.indexOf(errKey) == -1) {
+                            errBuff[errKey] = {
+                                index: index,
+                                msg: undefined,
+                                groupId: groupId,
+                                msgId: msgId,
+                                type: '🔍',
+                                logIndex: logIndex,
+                                isNoDuplicateFiles: false
+                            };
+                        }
+                        ;
+                    }
                     ;
-                    return [3 /*break*/, 8];
-                case 7:
+                    return [3 /*break*/, 5];
+                case 4:
                     ;
                     return [3 /*break*/, 0];
-                case 8:
+                case 5:
                     ;
+                    errDown();
+                    return [2 /*return*/];
+            }
+        });
+    });
+}
+;
+function errDown() {
+    return __awaiter(this, void 0, void 0, function () {
+        var errKeys, item, gIdAndIndex, likeStr, sqlStr, sqlArr, dbRet;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    if (isErrDownCore)
+                        return [2 /*return*/];
+                    isErrDownCore = true;
+                    errKeys = Object.keys(errBuff);
+                    _a.label = 1;
+                case 1:
+                    if (!(errKeys.length > 0)) return [3 /*break*/, 7];
+                    item = errBuff[errKeys[0]];
+                    gIdAndIndex = item.groupId + '+' + item.index;
+                    likeStr = "%".concat(item.groupId, "%");
+                    sqlStr = "SELECT * FROM log WHERE gIdAndIndex = ? AND msgId = ? ORDER BY log_i DESC";
+                    sqlArr = [gIdAndIndex, item.msgId];
+                    return [4 /*yield*/, dbAll(sqlStr, sqlArr)];
+                case 2:
+                    dbRet = _a.sent();
+                    if (!((dbRet.length == 0) || (dbRet[0].status.includes('[')))) return [3 /*break*/, 4];
+                    return [4 /*yield*/, downFile(item)];
+                case 3:
+                    _a.sent();
+                    _a.label = 4;
+                case 4:
+                    ;
+                    if (!(dbRet.length > 0)) return [3 /*break*/, 6];
+                    sqlStr = 'DELETE FROM log WHERE gIdAndIndex LIKE ? AND msgId = ? AND status LIKE ? AND log_i <= ?';
+                    sqlArr = [likeStr, item.msgId, '%[START]%', dbRet[0].log_i];
+                    return [4 /*yield*/, dbRun(sqlStr, sqlArr)];
+                case 5:
+                    _a.sent();
+                    _a.label = 6;
+                case 6:
+                    ;
+                    delete errBuff[errKeys[0]];
+                    errKeys = Object.keys(errBuff);
+                    return [3 /*break*/, 1];
+                case 7:
+                    ;
+                    isErrDownCore = false;
                     return [2 /*return*/];
             }
         });
@@ -1035,7 +1071,7 @@ function rangeDown() {
                     ;
                     maxId = Math.min(maxId, maxMsgIds[i]);
                     currentId = Number(task.rangeMinValue) || 1;
-                    task.rangeMinValue = currentId;
+                    task.rangeMinValue = task.rangeMinValue || currentId;
                     if (currentId > maxId)
                         return [3 /*break*/, 11];
                     task.rangeMinValue++;
@@ -1088,6 +1124,40 @@ function rangeDown() {
 ;
 function downFile(params) {
     return __awaiter(this, void 0, void 0, function () {
+        var e_4, groupId, msgId, errKey, errKeys;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    _a.trys.push([0, 2, , 3]);
+                    return [4 /*yield*/, downFileCore(params)];
+                case 1:
+                    _a.sent();
+                    return [3 /*break*/, 3];
+                case 2:
+                    e_4 = _a.sent();
+                    groupId = params.groupId, msgId = params.msgId;
+                    errKey = "groupId=".concat(groupId, ";msgId=").concat(msgId);
+                    errKeys = Object.keys(errBuff);
+                    if (errKeys.indexOf(errKey) == -1) {
+                        errBuff[errKey] = Object.assign({}, params, {
+                            type: '🔍',
+                            isNoDuplicateFiles: false
+                        });
+                    }
+                    ;
+                    errDown();
+                    eLog(e_4);
+                    return [3 /*break*/, 3];
+                case 3:
+                    ;
+                    return [2 /*return*/];
+            }
+        });
+    });
+}
+;
+function downFileCore(params) {
+    return __awaiter(this, void 0, void 0, function () {
         function addAfterDot(a, b) {
             var dotPosition = a.lastIndexOf('.');
             if (dotPosition == -1)
@@ -1096,7 +1166,7 @@ function downFile(params) {
                 + b + a.substring(dotPosition, Infinity);
             return a;
         }
-        var index, msg, groupId, msgId, type, logIndex, isNoDuplicateFiles, task, gIdAndIndex, mInfo, logTime, sqlStr_1, sqlArr_1, dbRet, _i, dbRet_1, item, link_1, log_1, status, link, msgTime, msgTime2, username, fileType, fileTypeCheck, sqlStr_2, sqlArr_2, log_2, sqlStr_3, sqlArr_3, dbRet, sqlStr_4, sqlArr_4, log_3, sqlStr, sqlArr, log, nameConf, fileName, oldFullPath, fullPath, buffer, count;
+        var index, msg, groupId, msgId, type, logIndex, isNoDuplicateFiles, task, gIdAndIndex, mInfo, logTime, status, link, msgTime, msgTime2, username, fileType, fileTypeCheck, log_1, sqlStr_1, sqlArr_1, dbRet_1, sqlStr_2, sqlArr_2, sqlStr_3, sqlArr_3, dbRet_2, log_2, sqlStr, sqlArr, log, nameConf, fileName, oldFullPath, fullPath, buffer, count, dbRet;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
@@ -1108,134 +1178,129 @@ function downFile(params) {
                         eLog("downFile err: ".concat(params));
                         return [2 /*return*/, 'missing params'];
                     }
-                    if (!!msg) return [3 /*break*/, 3];
-                    sqlStr_1 = "SELECT * FROM log WHERE gIdAndIndex = ? AND msgId = ?";
-                    sqlArr_1 = [gIdAndIndex, msgId];
-                    return [4 /*yield*/, dbAll(sqlStr_1, sqlArr_1)];
-                case 1:
-                    dbRet = _a.sent();
-                    for (_i = 0, dbRet_1 = dbRet; _i < dbRet_1.length; _i++) {
-                        item = dbRet_1[_i];
-                        if (item.status == '[0MSG]' || item.status == '[0MED]') {
-                            link_1 = msgId;
-                            try {
-                                link_1 = "t.me/c/".concat(groupId.replace('-100', ''), "/").concat(msgId);
-                            }
-                            catch (_b) { }
-                            ;
-                            log_1 = [
-                                ['gray', "".concat(type, " ").concat(msgId, " old data: ").concat(item.status), link_1]
-                            ];
-                            dLog(logIndex, log_1);
-                            return [2 /*return*/, log_1];
-                        }
-                    }
-                    ;
+                    if (!!msg) return [3 /*break*/, 2];
                     return [4 /*yield*/, gramJsClient.getMessages(groupId, { ids: [msgId] })];
-                case 2:
+                case 1:
+                    // let sqlStr = `SELECT * FROM log WHERE gIdAndIndex = ? AND msgId = ?`;
+                    // let sqlArr = [gIdAndIndex, msgId];
+                    // let dbRet: any = await dbAll(sqlStr, sqlArr);
+                    // for (let item of dbRet) {
+                    //   if (item.status == '[NO MSG]' || item.status == '[NO MEDIA]') {
+                    //     let link = msgId;
+                    //     try {
+                    //       link = `t.me/c/${groupId.replace('-100', '')}/${msgId}`;
+                    //     } catch { };
+                    //     let log: any = [
+                    //       ['gray', `${type} ${msgId} old data: ${item.status}`, link]
+                    //     ];
+                    //     dLog(logIndex, log);
+                    //     return log;
+                    //   }
+                    // };
                     msg = _a.sent();
                     msg = msg[0];
-                    _a.label = 3;
-                case 3:
+                    _a.label = 2;
+                case 2:
                     ;
                     status = '';
                     link = '';
                     msgTime = '';
                     msgTime2 = '';
                     return [4 /*yield*/, msgToUsername(msg)];
-                case 4:
+                case 3:
                     username = _a.sent();
-                    if (!(!msg || msg == 'no msg')) return [3 /*break*/, 5];
-                    status = '[0MSG]';
-                    return [3 /*break*/, 10];
-                case 5:
+                    if (!(!msg || msg == 'no msg')) return [3 /*break*/, 4];
+                    status = '[NO MSG]';
+                    return [3 /*break*/, 9];
+                case 4:
                     try {
                         groupId = '-100' + msg.peerId.channelId;
                         gIdAndIndex = groupId + '+' + index;
                     }
-                    catch (_c) { }
+                    catch (_b) { }
                     ;
                     try {
                         msgId = msg.id;
                     }
-                    catch (_d) { }
+                    catch (_c) { }
                     ;
                     try {
                         msgTime = time2(msg.date * 1000).long;
                         msgTime2 = ' ' + time2(msg.date * 1000).short;
                     }
-                    catch (_e) { }
+                    catch (_d) { }
                     ;
-                    if (!!msg.media) return [3 /*break*/, 6];
-                    status = '[0MED]';
-                    return [3 /*break*/, 9];
-                case 6:
-                    if (!(!msg.media.photo && !msg.media.document)) return [3 /*break*/, 7];
-                    status = '[0PHOTO/DOC]';
-                    return [3 /*break*/, 9];
-                case 7: return [4 /*yield*/, mediaInfo(msg, index)];
-                case 8:
+                    if (!!msg.media) return [3 /*break*/, 5];
+                    status = '[NO MEDIA]';
+                    return [3 /*break*/, 8];
+                case 5:
+                    if (!(!msg.media.photo && !msg.media.document)) return [3 /*break*/, 6];
+                    status = '[NO PHOTO/DOC]';
+                    return [3 /*break*/, 8];
+                case 6: return [4 /*yield*/, mediaInfo(msg, index)];
+                case 7:
                     mInfo = _a.sent();
                     // if (test) console.log(mInfo);
                     if (task.fileSizeMin && (mInfo.fileSize < task.fileSizeMin * 1024 * 1024))
-                        status = "[2SMALL] | ".concat((mInfo.fileSize / 1024 / 1024).toFixed(2), " mb");
+                        status = "[FILE TOO SMALL] ".concat((mInfo.fileSize / 1024 / 1024).toFixed(2), " mb");
                     if (task.fileSizeMax && (mInfo.fileSize > task.fileSizeMax * 1024 * 1024))
-                        status = "[2BIG] | ".concat((mInfo.fileSize / 1024 / 1024).toFixed(2), " mb");
+                        status = "[FILE TOO BIG] ".concat((mInfo.fileSize / 1024 / 1024).toFixed(2), " mb");
                     fileType = mInfo.type.split('|');
                     fileTypeCheck = fileType.filter(function (item) { return task.fileType[item]; });
                     if (fileTypeCheck.length == 0)
                         status = "[0TYPE] ".concat(mInfo.type);
+                    _a.label = 8;
+                case 8:
+                    ;
                     _a.label = 9;
                 case 9:
                     ;
-                    _a.label = 10;
-                case 10:
-                    ;
                     link = "t.me/c/".concat(groupId.replace('-100', ''), "/").concat(msgId);
-                    if (!status) return [3 /*break*/, 12];
+                    if (!status) return [3 /*break*/, 13];
+                    log_1 = [];
+                    if (status != '[NO MSG]')
+                        log_1.push(['default', "".concat(type, " ").concat(username, ": ").concat((msg && msg.message) ? msg.message : 'null')]);
+                    log_1.push(['gray', "\u3000 ".concat(msgId).concat(msgTime2, " ").concat(status), link]);
+                    dLog(logIndex, log_1);
+                    return [2 /*return*/, log_1];
+                case 10:
+                    dbRet_1 = _a.sent();
+                    if (!(dbRet_1.length == 0)) return [3 /*break*/, 12];
                     sqlStr_2 = "INSERT INTO log (gIdAndIndex, msgId, type, msgTime, logTime, link, status)";
                     sqlStr_2 += "VALUES (?, ?, ?, ?, ?, ?, ?)";
                     sqlArr_2 = [gIdAndIndex, msgId, type, '', logTime, '', status];
                     return [4 /*yield*/, dbRun(sqlStr_2, sqlArr_2)];
                 case 11:
                     _a.sent();
-                    log_2 = [];
-                    if (status != '[0MSG]')
-                        log_2.push(['default', "".concat(type, " ").concat(username, ": ").concat((msg && msg.message) ? msg.message : 'null')]);
-                    log_2.push(['gray', "\u3000 ".concat(msgId).concat(msgTime2, " ").concat(status), link]);
-                    dLog(logIndex, log_2);
-                    return [2 /*return*/, log_2];
+                    _a.label = 12;
                 case 12:
                     ;
-                    if (!isNoDuplicateFiles) return [3 /*break*/, 16];
+                    _a.label = 13;
+                case 13:
+                    ;
+                    if (!isNoDuplicateFiles) return [3 /*break*/, 15];
                     sqlStr_3 = "SELECT * FROM log WHERE gIdAndIndex = ? AND status LIKE ?";
                     sqlArr_3 = [gIdAndIndex, "%".concat(mInfo.idHash, "%")];
                     return [4 /*yield*/, dbAll(sqlStr_3, sqlArr_3)];
-                case 13:
-                    dbRet = _a.sent();
-                    if (!(dbRet.length > 0)) return [3 /*break*/, 15];
-                    sqlStr_4 = "INSERT INTO log (gIdAndIndex, msgId, type, msgTime, logTime, link, status)";
-                    sqlStr_4 += "VALUES (?, ?, ?, ?, ?, ?, ?)";
-                    sqlArr_4 = [gIdAndIndex, msgId, type, '', logTime, '', "[DUPLICATE]"];
-                    return [4 /*yield*/, dbRun(sqlStr_4, sqlArr_4)];
                 case 14:
-                    _a.sent();
-                    log_3 = [
-                        ['default', "".concat(type, " ").concat(username, ": ").concat(msg.message || 'null')],
-                        ['gray', "\u3000 ".concat(msgId).concat(msgTime2, " [DUPLICATE FILE] ").concat(mInfo.fileName || 'photo ' + mInfo.timeStamp), link],
-                    ];
-                    dLog(logIndex, log_3);
-                    return [2 /*return*/, log_3];
-                case 15:
+                    dbRet_2 = _a.sent();
+                    if (dbRet_2.length > 0) {
+                        log_2 = [
+                            ['default', "".concat(type, " ").concat(username, ": ").concat(msg.message || 'null')],
+                            ['gray', "\u3000 ".concat(msgId).concat(msgTime2, " [DUPLICATE FILE] ").concat(mInfo.fileName || 'photo ' + mInfo.timeStamp), link],
+                        ];
+                        dLog(logIndex, log_2);
+                        return [2 /*return*/, log_2];
+                    }
                     ;
-                    _a.label = 16;
-                case 16:
+                    _a.label = 15;
+                case 15:
                     ;
                     sqlStr = "INSERT INTO log (gIdAndIndex, msgId, type, msgTime, logTime, link, status)";
                     sqlStr += "VALUES (?, ?, ?, ?, ?, ?, ?)";
                     sqlArr = [gIdAndIndex, msgId, type, '', logTime, '', "[START]-".concat(mInfo.idHash)];
                     return [4 /*yield*/, dbRun(sqlStr, sqlArr)];
-                case 17:
+                case 16:
                     _a.sent();
                     log = [
                         ['default', "".concat(type, " ").concat(username, ": ").concat(msg.message || 'null')],
@@ -1245,7 +1310,7 @@ function downFile(params) {
                     try {
                         fs.mkdirSync(mInfo.filePath, { recursive: true });
                     }
-                    catch (_f) { }
+                    catch (_e) { }
                     ;
                     nameConf = task['fileName'];
                     fileName = mInfo.fileName ? [mInfo.fileName] : [];
@@ -1265,6 +1330,8 @@ function downFile(params) {
                         fileName = chineseConv.sify(fileName);
                     if (nameConf['转繁体'])
                         fileName = chineseConv.tify(fileName);
+                    if (nameConf['no emoji'])
+                        fileName = nodeEmoji.unemojify(fileName);
                     ;
                     fileName = addAfterDot(fileName, randomstring.generate(8));
                     fileName = lx.goodFilename(fileName);
@@ -1273,7 +1340,7 @@ function downFile(params) {
                     oldFullPath = mInfo.filePath + fileName;
                     fullPath = oldFullPath;
                     return [4 /*yield*/, gramJsClient.downloadMedia(msg.media)];
-                case 18:
+                case 17:
                     buffer = _a.sent();
                     count = 1;
                     while (fs.existsSync(fullPath)) {
@@ -1282,11 +1349,27 @@ function downFile(params) {
                     }
                     ;
                     fs.writeFileSync(fullPath, buffer);
-                    sqlStr = 'UPDATE log SET status = ? WHERE gIdAndIndex = ? AND msgId = ? AND logTime = ? AND status LIKE ?';
-                    sqlArr = [mInfo.idHash, gIdAndIndex, msgId, logTime, '%[START]%'];
+                    sqlStr = 'SELECT * FROM log WHERE gIdAndIndex = ? AND msgId = ? AND status = ?';
+                    sqlArr = [gIdAndIndex, msgId, mInfo.idHash];
+                    return [4 /*yield*/, dbAll(sqlStr, sqlArr)];
+                case 18:
+                    dbRet = _a.sent();
+                    if (!(dbRet.length > 0)) return [3 /*break*/, 20];
+                    sqlStr = 'DELETE FROM log WHERE gIdAndIndex = ? AND msgId = ? AND logTime = ? AND status LIKE ?';
+                    sqlArr = [gIdAndIndex, msgId, logTime, '%[START]%'];
                     return [4 /*yield*/, dbRun(sqlStr, sqlArr)];
                 case 19:
                     _a.sent();
+                    return [3 /*break*/, 22];
+                case 20:
+                    sqlStr = 'UPDATE log SET status = ? WHERE gIdAndIndex = ? AND msgId = ? AND logTime = ? AND status LIKE ?';
+                    sqlArr = [mInfo.idHash, gIdAndIndex, msgId, logTime, '%[START]%'];
+                    return [4 /*yield*/, dbRun(sqlStr, sqlArr)];
+                case 21:
+                    _a.sent();
+                    _a.label = 22;
+                case 22:
+                    ;
                     log = [
                         ['green', "\u3000 ".concat(msgId).concat(msgTime2, " [DONE] ").concat(fullPath.replace(mInfo.filePath, '')), link],
                     ];

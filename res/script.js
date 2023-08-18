@@ -35,6 +35,7 @@ const DEFAULT_D_TASK = {
     time: true,
     "username": false,
     "message text": false,
+    "no emoji": false,
     "转简体": false,
     "转繁体": false,
   },
@@ -272,25 +273,22 @@ function downloadLogsChange(that, init) {
   let ele = document.querySelectorAll('.logBox');
   let n = ele.length;
   for (let i = 0; i < n; i++) {
+    // for (let i = 0; i < 1; i++) {
     let item = ele[i];
     if (!that.downloadLogs[i]) that.downloadLogs[i] = [];
     if (that.downloadLogs[i].length > 288) that.downloadLogs[i].shift();
     // item.textContent = this.downloadLogs[i].join('\n');
     item.innerHTML = that.downloadLogs[i].join('<br />');
-    if (item.scrollHeight - item.scrollTop - item.clientHeight < 50) {
+    // console.log(111, item.scrollHeight, item.scrollTop, item.clientHeight);
+    // console.log(222, item.scrollHeight - item.scrollTop - item.clientHeight);
+    if ((item.scrollHeight - item.scrollTop - item.clientHeight) < 188) {
+      // console.log(333, item.scrollHeight - item.scrollTop - item.clientHeight);
       item.scrollTop = item.scrollHeight;
+      // console.log(444, item.scrollHeight - item.scrollTop - item.clientHeight);
+      // item.scrollTop = 0;
     };
   };
 };
-
-
-// let ele = document.querySelectorAll('.logBox');
-// for (let item of ele) {
-//   if (item.scrollHeight - item.scrollTop - item.clientHeight < 50) {
-//     item.scrollTop = item.scrollHeight;
-//   };
-// };
-
 
 // setCookie() { sendReq(this, 'read'); },
 // setConfigs() { sendReq(this, 'write'); },

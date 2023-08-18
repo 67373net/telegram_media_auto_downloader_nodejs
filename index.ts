@@ -9,6 +9,7 @@ const { StringSession } = require("telegram/sessions");
 const express = require('express');
 const os = require('os');
 const randomstring = require("randomstring");
+const nodeEmoji = require("node-emoji");
 
 let db: any;
 let io: any;
@@ -20,7 +21,7 @@ try {
   downloadLogs = fs.readFileSync(logsPath, 'utf-8');
   downloadLogs = JSON.parse(downloadLogs);
 } catch { };
-let logBuff = [];
+let logBuff: any[] = [];
 let isErrDownCore = false;
 let errBuff: any = {};
 let configs = getConfigs();
@@ -35,9 +36,9 @@ async function main(): Promise<void> {
   await dbInit();
   await portInit();
   await tgLoginFromConfigs();
-  setInterval(gramJsInitCheck, 1000); // 防止掉线
+  setInterval(gramJsInitCheck, 1000); // 防止掉线，获取群名
   startServer();
-  errDown();
+  errFromDb();
   realTimeDown();
   rangeDown();
   setInterval(() => {
@@ -129,6 +130,16 @@ async function gramJsInitCheck() {
   try {
     await gramJsClient.start();
     gramJsClient.setLogLevel("warn");
+    if (!gramJsClient._log.logReset) {
+      try {
+        let oldLog = gramJsClient._log.log;
+        gramJsClient._log.log = function () {
+          // console.log(123456789, ...arguments);
+          oldLog.apply(gramJsClient._log, arguments);
+        };
+        gramJsClient._log.logReset = true;
+      } catch { };
+    };
     for (let i in configs.downloadTasks) {
       let task = configs.downloadTasks[i];
       if (task.groupName) continue;
@@ -368,7 +379,7 @@ function eLog(e: any) {
 
 function dLog(i: number, logs: any) {
   // texts = [].concat(texts);
-  let styleObj = {
+  let styleObj: { [key: string]: any[] } = {
     default: ['\x1b[0m%s\x1b[0m', '<span onclick="">', '</span>'],
     green: ['\x1b[32m%s\x1b[0m', '<span style="color: #8c8" onclick="">', '</span>'],
     gray: ['\x1b[90m%s\x1b[0m', '<span style="color: #aaa" onclick="">', '</span>'],
@@ -539,7 +550,7 @@ async function myIdtoMsg(groupId: any, currentId: number, maxId: number) {
   return msgs[0];
 };
 
-async function errDown() {
+async function errFromDb() {
   while (1) {
     await lx.wait(1288);
     if (showTgLogin) {
@@ -573,10 +584,11 @@ async function errDown() {
       break;
     };
   };
-  if (!isErrDownCore) errDownCore();
+  errDown();
 };
 
-async function errDownCore() {
+async function errDown() {
+  if (isErrDownCore) return;
   isErrDownCore = true;
   let errKeys = Object.keys(errBuff);
   while (errKeys.length > 0) {
@@ -654,7 +666,7 @@ async function rangeDown() {
         };
         maxId = Math.min(maxId, maxMsgIds[i]);
         let currentId = Number(task.rangeMinValue) || 1;
-        task.rangeMinValue = currentId;
+        task.rangeMinValue = task.rangeMinValue || currentId;
         if (currentId > maxId) continue;
         task.rangeMinValue++;
         writeConfigs();
@@ -683,7 +695,7 @@ async function rangeDown() {
 
 async function downFile(params: any) {
   try {
-    await downFile(params);
+    await downFileCore(params);
   } catch (e) {
     let { groupId, msgId } = params;
     let errKey: string = `groupId=${groupId};msgId=${msgId}`;
@@ -822,6 +834,7 @@ async function downFileCore(params: any) {
   if (mInfo.type == 'photo') fileName += mInfo.suffix;
   if (nameConf['转简体']) fileName = chineseConv.sify(fileName);
   if (nameConf['转繁体']) fileName = chineseConv.tify(fileName);
+  if (nameConf['no emoji']) fileName = nodeEmoji.unemojify(fileName);
   function addAfterDot(a: string, b: string): string {
     let dotPosition = a.lastIndexOf('.');
     if (dotPosition == -1) dotPosition = Infinity;
@@ -911,6 +924,7 @@ interface Configs {
       time: boolean,
       "username": boolean,
       "message text": boolean,
+      "no emoji": boolean,
       "转简体": boolean,
       "转繁体": boolean,
       // "group id": boolean,
